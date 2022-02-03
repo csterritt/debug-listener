@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
+	"github.com/muesli/reflow/wrap"
 )
 
 // You generally won't need this unless you're processing stuff with
@@ -160,7 +161,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case remoteMessage:
 		if len(msg.message) > 0 {
-			m.content += wordwrap.String(msg.message+"\n", m.viewport.Width)
+			m.content += wrap.String(wordwrap.String(msg.message+"\n", m.viewport.Width), m.viewport.Width)
 			m.viewport.SetContent(m.content)
 		}
 		return m, nil
