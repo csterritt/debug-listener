@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -16,7 +18,15 @@ import (
 // Also keep in mind that high performance rendering only works for programs
 // that use the full size of the terminal. We're enabling that below with
 // tea.EnterAltScreen().
-const useHighPerformanceRenderer = false
+const (
+	// sockets information
+	connHost = "localhost"
+	connPort = "21212"
+	connType = "tcp"
+
+	// bubbletea
+	useHighPerformanceRenderer = false
+)
 
 var (
 	titleStyle = func() lipgloss.Style {
@@ -38,10 +48,51 @@ type model struct {
 	viewport viewport.Model
 }
 
+type remoteMessage struct {
+	message string
+}
+
 func initialModel() model {
 	return model{
-		content: "...content goes here...",
+		content: "",
 	}
+}
+
+func handleConnection(conn net.Conn, p *tea.Program) {
+	reader := bufio.NewReader(conn)
+
+	for {
+		buffer, err := reader.ReadBytes('\n')
+
+		if err != nil {
+			//fmt.Println("Client left.")
+			conn.Close()
+			return
+		}
+
+		p.Send(remoteMessage{message: string(buffer[:len(buffer)-1])})
+	}
+}
+
+func startListener(p *tea.Program) {
+	go func() {
+		l, err := net.Listen(connType, connHost+":"+connPort)
+		if err != nil {
+			fmt.Println("Error listening to port:", err.Error())
+			os.Exit(1)
+		}
+		defer l.Close()
+
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				fmt.Println("Error connecting:", err.Error())
+				return
+			}
+
+			go handleConnection(c, p)
+		}
+	}()
 }
 
 func (m model) Init() tea.Cmd {
@@ -66,6 +117,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "c":
+			m.content = ""
 			m.viewport.SetContent("")
 			return m, nil
 		}
@@ -104,6 +156,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// This is needed for high-performance rendering only.
 			cmds = append(cmds, viewport.Sync(m.viewport))
 		}
+
+	case remoteMessage:
+		if len(msg.message) > 0 {
+			m.content += msg.message + "\n"
+			m.viewport.SetContent(m.content)
+		}
+		return m, nil
 	}
 
 	// Handle keyboard and mouse events in the viewport
@@ -146,6 +205,7 @@ var p *tea.Program
 func main() {
 	model := initialModel()
 	p = tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	startListener(p)
 	if err := p.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
