@@ -26,6 +26,11 @@ func main() {
 	// Create new reader from Stdin.
 	reader := bufio.NewReader(os.Stdin)
 
+	if len(os.Args) > 1 {
+		fmt.Println("Setting name to", os.Args[1])
+		conn.Write([]byte("::name::" + os.Args[1] + "\n"))
+	}
+
 	// run loop forever, until exit.
 	for {
 		// Prompting message.

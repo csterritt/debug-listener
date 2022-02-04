@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/indent"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
 )
@@ -42,6 +43,9 @@ var (
 		b.Left = "┤"
 		return titleStyle.Copy().BorderStyle(b)
 	}()
+
+	boldStyle = lipgloss.NewStyle().
+			Bold(true)
 )
 
 type model struct {
@@ -51,6 +55,7 @@ type model struct {
 }
 
 type remoteMessage struct {
+	name    string
 	message string
 }
 
@@ -62,17 +67,22 @@ func initialModel() model {
 
 func handleConnection(conn net.Conn, p *tea.Program) {
 	reader := bufio.NewReader(conn)
+	name := ""
 
 	for {
 		buffer, err := reader.ReadBytes('\n')
 
 		if err != nil {
-			//fmt.Println("Client left.")
 			conn.Close()
 			return
 		}
 
-		p.Send(remoteMessage{message: string(buffer[:len(buffer)-1])})
+		str := string(buffer[:len(buffer)-1])
+		if index := strings.Index(str, "::name::"); index != -1 {
+			name = strings.TrimSpace(str[index+8:]) + ": "
+		} else {
+			p.Send(remoteMessage{name: name, message: str})
+		}
 	}
 }
 
@@ -161,7 +171,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case remoteMessage:
 		if len(msg.message) > 0 {
-			m.content += wrap.String(wordwrap.String(msg.message+"\n", m.viewport.Width), m.viewport.Width)
+			output := msg.message
+			if len(msg.name) > 0 {
+				output = boldStyle.Render(msg.name) + msg.message
+			}
+			output = wordwrap.String(output, m.viewport.Width-(4+len(msg.name)))
+			output = indent.String(" "+output, 4)
+			output = strings.TrimLeft(output, " ")
+			m.content += wrap.String(output+"\n", m.viewport.Width)
 			m.viewport.SetContent(m.content)
 		}
 		return m, nil
